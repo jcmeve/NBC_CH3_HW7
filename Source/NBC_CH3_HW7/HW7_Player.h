@@ -29,7 +29,8 @@ protected:
 	
 	UFUNCTION()
 	void Look(const FInputActionValue& Value);
-	
+	void GroundProcess(float DeltaTime);
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,Category="HW7_Player")
 	USceneComponent* SceneRoot;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,Category="HW7_Player|Camera")
@@ -40,25 +41,28 @@ protected:
 	USkeletalMeshComponent* SkeletalMeshComponent;
 	
 	
-	UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="HW7_Player|Camera")
-	double CameraLowerBound=60.0;
-	UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="HW7_Player|Camera")
-	double CameraUpperBound=30.0;
-	
-	UPROPERTY(EditAnywhere,Category="HW7_Player|Movement")
-	float MaxMoveSpeed;
-	UPROPERTY(EditAnywhere,Category="HW7_Player|Movement")
-	float Acceleration;
-	
-		
+	UPROPERTY(VisibleAnywhere,Category="HW7_Player|Movement")
+	float Gravity;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,Category="HW7_Player|Movement")
 	float CurrentMoveSpeed;	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,Category="HW7_Player|Movement")
-	bool bIsTurning;	
+	bool bIsTurning;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,Category="HW7_Player|Movement")
+	bool bIsOnGround;	
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly,Category="HW7_Player|Movement")
+	float Acceleration;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly,Category="HW7_Player|Movement")
+	float DragConstant;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly,Category="HW7_Player|Movement")
+	float AirControl;	
 private:
-	FVector MoveDir;
-	FVector2D LookVector;
-	FVector2D MoveInput;
+	FVector Velocity;
+	FVector LookVector;
+	FVector MoveInput;
+	FVector Bounds;
+	float GrountCheckTimer;
+	const float GrountCheckTime = 0.2f;
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;

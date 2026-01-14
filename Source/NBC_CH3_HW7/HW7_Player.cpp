@@ -2,6 +2,7 @@
 
 
 #include "HW7_Player.h"
+
 #include "EnhancedInputComponent.h"
 #include "HW7_PlayerController.h"
 #include "Camera/CameraComponent.h"
@@ -9,8 +10,12 @@
 
 // Sets default values
 AHW7_Player::AHW7_Player()
-	: MaxMoveSpeed(600.0f),
-	  Acceleration(1000.0f)
+	: Gravity(980),
+	  Acceleration(2000),
+	  DragConstant(0.0005f),
+	  GrountCheckTimer(0.0f),
+	  AirControl(0.5f),
+	  bIsOnGround(true)
 {
 	// Set this pawn to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
@@ -50,52 +55,117 @@ AHW7_Player::AHW7_Player()
 void AHW7_Player::BeginPlay()
 {
 	Super::BeginPlay();
+	Bounds = SkeletalMeshComponent->Bounds.BoxExtent;
 }
 
 void AHW7_Player::Move(const FInputActionValue& Value)
 {
-	MoveInput = Value.Get<FVector2D>();
-	MoveDir =  {MoveInput.X , MoveInput.Y,0.0};
-	MoveDir.Normalize();
+	MoveInput = Value.Get<FVector>();
 }
 
 void AHW7_Player::Look(const FInputActionValue& Value)
 {
-	LookVector = Value.Get<FVector2D>();
+	LookVector = Value.Get<FVector>();
+}
+
+void AHW7_Player::GroundProcess(float DeltaTime)
+{
+	FHitResult Hit;
+	FCollisionQueryParams CollisionParams;
+	CollisionParams.AddIgnoredActor(this);
+
+	GetWorld()->LineTraceSingleByChannel(Hit, GetActorLocation(),
+	                                     GetActorLocation() + (FVector{0.0, 0.0, -1.0} * (15.0f +
+		                                     Bounds.Z)), ECC_Visibility, CollisionParams);
+
+	if (Hit.bBlockingHit)
+	{
+		GrountCheckTimer = 0.0f;
+		if (!bIsOnGround)
+		{
+			FVector CurrentLocation = GetActorLocation();
+			SetActorLocation(FVector{CurrentLocation.X, CurrentLocation.Y, Hit.ImpactPoint.Z + Bounds.Z});
+		}
+		bIsOnGround = true;
+	}
+	else
+	{
+		GrountCheckTimer += DeltaTime;
+		if (GrountCheckTimer >= GrountCheckTime)
+		{
+			bIsOnGround = false;
+		}
+	}
+
+	if (bIsOnGround)
+	{
+		FRotator Rotator = GetActorRotation();
+		float NewRoll = FMath::FInterpTo(Rotator.Roll,0.0,DeltaTime,5.0f);
+		float NewPitch = FMath::FInterpTo(Rotator.Pitch,0.0,DeltaTime,5.0f);
+		SetActorRotation(FRotator{NewPitch, Rotator.Yaw, NewRoll});
+	}
+	else
+	{
+		FVector DragForce = -Velocity.GetSafeNormal() * (CurrentMoveSpeed * CurrentMoveSpeed * DragConstant);
+		Velocity += DragForce * DeltaTime;
+	}
 }
 
 // Called every frame
 void AHW7_Player::Tick(float DeltaTime)
 {
+	Super::Tick(DeltaTime);
+	GroundProcess(DeltaTime);
+
+	FVector DownVector = GetActorQuat().Inverse().RotateVector({0, 0, -1});// GetTransform().InverseTransformVector({0, 0, -1});
+	Velocity += DownVector * Gravity * DeltaTime;
+
+
+	GEngine->AddOnScreenDebugMessage(0,5,FColor::Red,FString::SanitizeFloat(CurrentMoveSpeed));
+
 	if (!MoveInput.IsNearlyZero())
 	{
-		CurrentMoveSpeed+=Acceleration*DeltaTime;
-		CurrentMoveSpeed = CurrentMoveSpeed >MaxMoveSpeed ? MaxMoveSpeed:CurrentMoveSpeed;
-		MoveInput = FVector2D::ZeroVector;
-	}	
+		if (bIsOnGround && !FMath::IsNearlyZero(MoveInput.Z)) //Like Jump
+		{
+			Velocity.Z += (2 * DeltaTime * Acceleration);
+		}
+		float _Acceleration = bIsOnGround ? Acceleration : Acceleration * AirControl;
+		Velocity += MoveInput * DeltaTime * _Acceleration;
+		MoveInput = FVector::ZeroVector;
+	}
 	else
 	{
-		CurrentMoveSpeed = FMath::Lerp(CurrentMoveSpeed,0.0f,0.02f);
-		if (CurrentMoveSpeed <0.1f)
+		if(bIsOnGround)
 		{
-			CurrentMoveSpeed = 0.0f;
-			MoveDir = FVector::ZeroVector;
+			Velocity = FMath::VInterpTo(Velocity, FVector::ZeroVector,DeltaTime, 5.0f);
 			
+			//Velocity = FMath::Lerp(Velocity, FVector::ZeroVector, 5.0f);
+			CurrentMoveSpeed = Velocity.Length();
+			if (CurrentMoveSpeed < 1.0f)
+			{
+				CurrentMoveSpeed = 0.0f;
+				Velocity = FVector::ZeroVector;
+			}
 		}
 	}
-	
+
 	if (!FMath::IsNearlyZero(CurrentMoveSpeed))
 	{
-		AddActorLocalOffset(MoveDir * CurrentMoveSpeed * DeltaTime);
+		float DownSpeed = FVector::DotProduct(DownVector, Velocity);
+		if (DownSpeed >= 0.0f)
+		{
+			if (bIsOnGround)
+			{
+				Velocity += -DownVector * DownSpeed;
+			}
+		}
+		AddActorLocalOffset(Velocity * DeltaTime);
 	}
 
 	if (!LookVector.IsNearlyZero())
 	{
-		AddActorLocalRotation(FRotator(0, LookVector.X, 0.0f));
-		double TargetPitch = SpringArmComponent->GetRelativeRotation().Pitch - LookVector.Y;
-		TargetPitch = FMath::Clamp(TargetPitch, -CameraLowerBound, CameraUpperBound);
-		SpringArmComponent->SetRelativeRotation(FRotator(TargetPitch, 0, 0.0f));
-		LookVector = FVector2D::ZeroVector;
+		AddActorLocalRotation(FRotator(bIsOnGround ? 0 : LookVector.Y, LookVector.X, bIsOnGround ? 0 : LookVector.Z));
+		LookVector = FVector::ZeroVector;
 		bIsTurning = true;
 	}
 	else
@@ -103,7 +173,12 @@ void AHW7_Player::Tick(float DeltaTime)
 		bIsTurning = false;
 	}
 
-	Super::Tick(DeltaTime);
+	CurrentMoveSpeed = Velocity.Length();
+	if (CurrentMoveSpeed < 1.0f)
+	{
+		CurrentMoveSpeed = 0.0f;
+		Velocity = FVector::ZeroVector;
+	}
 }
 
 // Called to bind functionality to input

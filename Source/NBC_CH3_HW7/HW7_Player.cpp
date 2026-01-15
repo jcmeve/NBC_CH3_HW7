@@ -14,7 +14,7 @@ AHW7_Player::AHW7_Player()
 	  Acceleration(2000),
 	  DragConstant(0.0005f),
 	  GrountCheckTimer(0.0f),
-	  AirControl(0.5f),
+	  AirControl(0.7f),
 	  bIsOnGround(true)
 {
 	// Set this pawn to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
@@ -73,10 +73,11 @@ void AHW7_Player::GroundProcess(float DeltaTime)
 	FHitResult Hit;
 	FCollisionQueryParams CollisionParams;
 	CollisionParams.AddIgnoredActor(this);
-
-	GetWorld()->LineTraceSingleByChannel(Hit, GetActorLocation(),
-	                                     GetActorLocation() + (FVector{0.0, 0.0, -1.0} * (15.0f +
-		                                     Bounds.Z)), ECC_Visibility, CollisionParams);
+	FCollisionShape Capsule = FCollisionShape::MakeCapsule(Bounds.X, Bounds.Z);
+	GetWorld()->SweepSingleByChannel(Hit, GetActorLocation(), 
+		GetActorLocation() + (FVector{0.0, 0.0, -1.0} * 5.0f
+		), GetActorQuat(), ECC_Visibility, Capsule, CollisionParams
+	);
 
 	if (Hit.bBlockingHit)
 	{
@@ -100,8 +101,8 @@ void AHW7_Player::GroundProcess(float DeltaTime)
 	if (bIsOnGround)
 	{
 		FRotator Rotator = GetActorRotation();
-		float NewRoll = FMath::FInterpTo(Rotator.Roll,0.0,DeltaTime,5.0f);
-		float NewPitch = FMath::FInterpTo(Rotator.Pitch,0.0,DeltaTime,5.0f);
+		float NewRoll = FMath::FInterpTo(Rotator.Roll, 0.0, DeltaTime, 5.0f);
+		float NewPitch = FMath::FInterpTo(Rotator.Pitch, 0.0, DeltaTime, 5.0f);
 		SetActorRotation(FRotator{NewPitch, Rotator.Yaw, NewRoll});
 	}
 	else
@@ -117,17 +118,25 @@ void AHW7_Player::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	GroundProcess(DeltaTime);
 
-	FVector DownVector = GetActorQuat().Inverse().RotateVector({0, 0, -1});// GetTransform().InverseTransformVector({0, 0, -1});
+	FVector DownVector = GetActorQuat().Inverse().RotateVector({0, 0, -1});
+	// GetTransform().InverseTransformVector({0, 0, -1});
 	Velocity += DownVector * Gravity * DeltaTime;
 
 
-	GEngine->AddOnScreenDebugMessage(0,5,FColor::Red,FString::SanitizeFloat(CurrentMoveSpeed));
+	GEngine->AddOnScreenDebugMessage(0, 5, FColor::Red, FString::SanitizeFloat(CurrentMoveSpeed));
 
 	if (!MoveInput.IsNearlyZero())
 	{
-		if (bIsOnGround && !FMath::IsNearlyZero(MoveInput.Z)) //Like Jump
+		if (bIsOnGround)
 		{
-			Velocity.Z += (2 * DeltaTime * Acceleration);
+			if (MoveInput.Z < 0.0f) //can't digging
+			{
+				MoveInput.Z = 0.0f;
+			}
+			else if (MoveInput.Z > 0.1f) //jump
+			{
+				Velocity.Z += (2 * DeltaTime * Acceleration);
+			}
 		}
 		float _Acceleration = bIsOnGround ? Acceleration : Acceleration * AirControl;
 		Velocity += MoveInput * DeltaTime * _Acceleration;
@@ -135,11 +144,9 @@ void AHW7_Player::Tick(float DeltaTime)
 	}
 	else
 	{
-		if(bIsOnGround)
+		if (bIsOnGround)
 		{
-			Velocity = FMath::VInterpTo(Velocity, FVector::ZeroVector,DeltaTime, 5.0f);
-			
-			//Velocity = FMath::Lerp(Velocity, FVector::ZeroVector, 5.0f);
+			Velocity = FMath::VInterpTo(Velocity, FVector::ZeroVector, DeltaTime, 5.0f);
 			CurrentMoveSpeed = Velocity.Length();
 			if (CurrentMoveSpeed < 1.0f)
 			{
@@ -149,7 +156,7 @@ void AHW7_Player::Tick(float DeltaTime)
 		}
 	}
 
-	if (!FMath::IsNearlyZero(CurrentMoveSpeed))
+	if (!Velocity.IsNearlyZero())
 	{
 		float DownSpeed = FVector::DotProduct(DownVector, Velocity);
 		if (DownSpeed >= 0.0f)
@@ -157,6 +164,7 @@ void AHW7_Player::Tick(float DeltaTime)
 			if (bIsOnGround)
 			{
 				Velocity += -DownVector * DownSpeed;
+
 			}
 		}
 		AddActorLocalOffset(Velocity * DeltaTime);

@@ -62,7 +62,7 @@ private:
 	FVector MoveInput;
 	FVector Bounds;
 	float GrountCheckTimer;
-	const float GrountCheckTime = 0.2f;
+	const float GrountCheckTime = 0.5f;
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;

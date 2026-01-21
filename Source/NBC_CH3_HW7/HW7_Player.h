@@ -30,6 +30,7 @@ protected:
 	UFUNCTION()
 	void Look(const FInputActionValue& Value);
 	void GroundProcess(float DeltaTime);
+	void InputProcess(float DeltaTime);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,Category="HW7_Player")
 	USceneComponent* SceneRoot;
@@ -50,6 +51,8 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,Category="HW7_Player|Movement")
 	bool bIsOnGround;	
 	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly,Category="HW7_Player|Movement")
+	float LookSpeed;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly,Category="HW7_Player|Movement")
 	float Acceleration;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly,Category="HW7_Player|Movement")

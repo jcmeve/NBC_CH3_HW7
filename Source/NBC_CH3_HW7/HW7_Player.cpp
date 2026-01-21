@@ -11,11 +11,12 @@
 // Sets default values
 AHW7_Player::AHW7_Player()
 	: Gravity(980),
+	  bIsOnGround(true),
+	  LookSpeed(90.0f),
 	  Acceleration(2000),
 	  DragConstant(0.0005f),
-	  GrountCheckTimer(0.0f),
 	  AirControl(0.7f),
-	  bIsOnGround(true)
+	  GrountCheckTimer(0.0f)
 {
 	// Set this pawn to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
@@ -74,9 +75,9 @@ void AHW7_Player::GroundProcess(float DeltaTime)
 	FCollisionQueryParams CollisionParams;
 	CollisionParams.AddIgnoredActor(this);
 	FCollisionShape Capsule = FCollisionShape::MakeCapsule(Bounds.X, Bounds.Z);
-	GetWorld()->SweepSingleByChannel(Hit, GetActorLocation(), 
-		GetActorLocation() + (FVector{0.0, 0.0, -1.0} * 5.0f
-		), GetActorQuat(), ECC_Visibility, Capsule, CollisionParams
+	GetWorld()->SweepSingleByChannel(Hit, GetActorLocation(),
+	                                 GetActorLocation() + (FVector{0.0, 0.0, -1.0} * 5.0f
+	                                 ), GetActorQuat(), ECC_Visibility, Capsule, CollisionParams
 	);
 
 	if (Hit.bBlockingHit)
@@ -112,19 +113,8 @@ void AHW7_Player::GroundProcess(float DeltaTime)
 	}
 }
 
-// Called every frame
-void AHW7_Player::Tick(float DeltaTime)
+void AHW7_Player::InputProcess(float DeltaTime)
 {
-	Super::Tick(DeltaTime);
-	GroundProcess(DeltaTime);
-
-	FVector DownVector = GetActorQuat().Inverse().RotateVector({0, 0, -1});
-	// GetTransform().InverseTransformVector({0, 0, -1});
-	Velocity += DownVector * Gravity * DeltaTime;
-
-
-	GEngine->AddOnScreenDebugMessage(0, 5, FColor::Red, FString::SanitizeFloat(CurrentMoveSpeed));
-
 	if (!MoveInput.IsNearlyZero())
 	{
 		if (bIsOnGround)
@@ -155,6 +145,18 @@ void AHW7_Player::Tick(float DeltaTime)
 			}
 		}
 	}
+}
+
+// Called every frame
+void AHW7_Player::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+	GroundProcess(DeltaTime);
+
+	FVector DownVector = GetActorQuat().Inverse().RotateVector({0, 0, -1});
+	Velocity += DownVector * Gravity * DeltaTime;
+
+	InputProcess(DeltaTime);
 
 	if (!Velocity.IsNearlyZero())
 	{
@@ -164,7 +166,6 @@ void AHW7_Player::Tick(float DeltaTime)
 			if (bIsOnGround)
 			{
 				Velocity += -DownVector * DownSpeed;
-
 			}
 		}
 		AddActorLocalOffset(Velocity * DeltaTime);
@@ -172,7 +173,9 @@ void AHW7_Player::Tick(float DeltaTime)
 
 	if (!LookVector.IsNearlyZero())
 	{
-		AddActorLocalRotation(FRotator(bIsOnGround ? 0 : LookVector.Y, LookVector.X, bIsOnGround ? 0 : LookVector.Z));
+		FRotator Rotator(bIsOnGround ? 0 : LookVector.Y, LookVector.X, bIsOnGround ? 0 : LookVector.Z);
+		Rotator*=DeltaTime*LookSpeed;
+		AddActorLocalRotation(Rotator.Quaternion());
 		LookVector = FVector::ZeroVector;
 		bIsTurning = true;
 	}
